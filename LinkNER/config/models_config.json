@@ -1,0 +1,20 @@
+[
+  {
+    "name": "spanNER_model1",
+    "path": "models/spanNER_model1.pkl",
+    "f1_score": 0.92,
+    "description": "SpanNER模型1 - BERT-base训练"
+  },
+  {
+    "name": "spanNER_model2", 
+    "path": "models/spanNER_model2.pkl",
+    "f1_score": 0.90,
+    "description": "SpanNER模型2 - RoBERTa-base训练"
+  },
+  {
+    "name": "spanNER_model3",
+    "path": "models/spanNER_model3.pkl", 
+    "f1_score": 0.88,
+    "description": "SpanNER模型3 - DistilBERT训练"
+  }
+]

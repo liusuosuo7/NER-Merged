@@ -121,6 +121,25 @@ def get_args():
                         help="Weight of negative span for loss function")
     parser.add_argument("--neg_span_weight", type=float, default=0.6, help="Weight of negative span for loss function")
 
+    # --------------------- Model Combination Arguments ----------------------
+    # 模型组合器相关参数
+    parser.add_argument("--use_combination", type=str2bool, default=False, 
+                        help="Whether to use model combination mode")
+    parser.add_argument("--models_config_path", type=str, default="config/models_config.json",
+                        help="Path to models configuration file for combination")
+    parser.add_argument("--combination_method", choices=["voting_majority", "voting_weighted_f1", "voting_with_probabilities"], 
+                        default="voting_majority", type=str, help="Method for combining model predictions")
+    
+    # Combination weighting parameters
+    parser.add_argument("--use_f1_weights", type=str2bool, default=True, 
+                        help="Whether to use F1 scores as weights in combination")
+    parser.add_argument("--use_prob_scores", type=str2bool, default=True, 
+                        help="Whether to use probability scores in combination")
+    parser.add_argument("--f1_weight", type=float, default=1.0, 
+                        help="Weight for F1 scores in combination")
+    parser.add_argument("--prob_weight", type=float, default=0.8, 
+                        help="Weight for probability scores in combination")
+
     # --------------------- Few-Shot Learning and Linking --------------------
     # LLM Few-shot学习和链接相关参数
     parser.add_argument("--selectShot_dir", type=str, default="data/conll03/spanSelect.dev", 
