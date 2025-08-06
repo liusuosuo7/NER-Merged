@@ -6,6 +6,7 @@ import logging
 import torch
 import json
 from src.framework import FewShotNERFramework
+from src.combined_framework import CombinedFewShotNERFramework
 from dataloaders.spanner_dataset import get_span_labels, get_loader
 from src.bert_model_spanner import BertNER
 from transformers import AutoTokenizer, AutoModel, AutoConfig
@@ -96,17 +97,32 @@ def main():
 
     edl = Span_Evidence(args, num_labels)
     logger = get_logger(args, seed_num)
-    framework = FewShotNERFramework(
-        args, 
-        logger, 
-        task_idx2label, 
-        train_data_loader, 
-        dev_data_loader, 
-        test_data_loader, 
-        edl, 
-        seed_num, 
-        num_labels=num_labels
-    )
+    
+    # 选择使用原始框架还是组合器框架
+    if args.use_combination:
+        framework = CombinedFewShotNERFramework(
+            args, 
+            logger, 
+            task_idx2label, 
+            train_data_loader, 
+            dev_data_loader, 
+            test_data_loader, 
+            edl, 
+            seed_num, 
+            num_labels=num_labels
+        )
+    else:
+        framework = FewShotNERFramework(
+            args, 
+            logger, 
+            task_idx2label, 
+            train_data_loader, 
+            dev_data_loader, 
+            test_data_loader, 
+            edl, 
+            seed_num, 
+            num_labels=num_labels
+        )
 
     if args.state == 'train':
         framework.train(model)
