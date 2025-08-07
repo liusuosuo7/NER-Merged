@@ -15,6 +15,7 @@ from src.Evidential_woker import Span_Evidence
 from metrics.mtrics_LinkResult import *
 from args_config import get_args
 from run_llm import *
+from combination.comb_voting import CombByVoting
 
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
@@ -49,6 +50,53 @@ def get_logger(args, seed):
 
     return logger
 
+def run_combination_only(args):
+    """仅运行模型组合功能"""
+    if not args.enable_combination or not args.model_files:
+        print("Error: Combination mode requires enable_combination=True and model_files to be specified")
+        return
+    
+    print(f"Running combination with method: {args.combination_method}")
+    print(f"Model files: {args.model_files}")
+    print(f"Model F1s: {args.model_f1s}")
+    
+    # 获取数据集类别（简化版本，实际应该从数据中推断）
+    if args.dataname == 'conll03':
+        classes = ['PER', 'LOC', 'ORG', 'MISC']
+    elif args.dataname == 'wnut17':
+        classes = ['person', 'location', 'group', 'creative-work', 'product']
+    else:
+        classes = ['PER', 'LOC', 'ORG']  # 默认类别
+    
+    # 使用默认F1分数如果没有提供
+    model_f1s = args.model_f1s if args.model_f1s else [1.0] * len(args.model_files)
+    
+    # 创建组合器
+    combiner = CombByVoting(
+        dataname=args.dataname,
+        file_dir=os.path.dirname(args.model_files[0]) if args.model_files else ".",
+        fmodels=[os.path.basename(f) for f in args.model_files],
+        f1s=model_f1s,
+        cmodelname=f"LinkNER_Combined_{args.combination_method}",
+        classes=classes,
+        fn_stand_res="",
+        fn_prob=args.prob_file if hasattr(args, 'prob_file') else "",
+        result_dir=args.combination_result_dir
+    )
+    
+    # 执行组合
+    results = combiner.combine_results(method=args.combination_method)
+    f1, p, r, correct_preds, total_preds, total_correct = results
+    
+    print(f"Combination Results:")
+    print(f"F1: {f1:.4f}")
+    print(f"Precision: {p:.4f}")
+    print(f"Recall: {r:.4f}")
+    print(f"Correct predictions: {correct_preds}")
+    print(f"Total predictions: {total_preds}")
+    print(f"Total correct: {total_correct}")
+
+
 def main():
     args = get_args()
     
@@ -66,6 +114,11 @@ def main():
     if args.state == 'llm_classify':
         dic = json.load(open(args.selectShot_dir)) if args.selectShot_dir and args.selectShot_dir != 'None' else None
         linkToLLM(args.input_file, args.save_file, dic, args)
+        return
+    
+    # 如果是组合器模式，直接运行组合器
+    if args.state == 'combination':
+        run_combination_only(args)
         return
 
     num_labels = args.n_class
@@ -130,7 +183,10 @@ def main():
 
     if args.state == 'inference':
         model = torch.load(args.inference_model)
-        framework.inference(model)
+        if args.enable_combination:
+            framework.inference_with_combination(model)
+        else:
+            framework.inference(model)
         logger.info("inference is ended!! 🎉")
 
 if __name__ == '__main__':

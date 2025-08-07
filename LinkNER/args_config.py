@@ -32,8 +32,8 @@ def get_args():
 
     # --------------------- Training State Arguments ---------------------------
     # 训练或推理状态相关参数
-    parser.add_argument("--state", choices=["train", "inference", "llm_classify"], 
-                        default="train", type=str, help="Train or Inference or Link Models")
+    parser.add_argument("--state", choices=["train", "inference", "llm_classify", "combination"], 
+                        default="train", type=str, help="Train or Inference or Link Models or Model Combination")
     parser.add_argument("--inference_model", type=str, help="BERT configuration directory")
     parser.add_argument("--uncertainty_type", type=str, default="confidence")
 
@@ -154,5 +154,22 @@ def get_args():
     parser.add_argument("--save_file", type=str, 
                         help="Path to save files after results from GPT-3.5 classification.")
     parser.add_argument("--threshold", type=float, default=0.4, help="Uncertainty threshold.")
+
+    # --------------------- Model Combination Parameters ---------------------
+    # 模型组合相关参数
+    parser.add_argument("--enable_combination", type=str2bool, default=False, 
+                        help="Enable model combination functionality")
+    parser.add_argument("--combination_method", type=str, default="voting_majority",
+                        choices=["best_potential", "voting_majority", "voting_weightByOverallF1", 
+                                "voting_weightByCategotyF1", "voting_prob"],
+                        help="Method for combining multiple model predictions")
+    parser.add_argument("--model_files", type=str, nargs='+', default=[],
+                        help="List of model result files to combine")
+    parser.add_argument("--model_f1s", type=float, nargs='+', default=[],
+                        help="F1 scores of individual models for weighted voting")
+    parser.add_argument("--combination_result_dir", type=str, default="combination/comb_result",
+                        help="Directory to save combination results")
+    parser.add_argument("--prob_file", type=str, default="",
+                        help="File containing probability information for probability-based voting")
 
     return parser.parse_args()

@@ -6,7 +6,9 @@ import time
 import prettytable as pt
 import os
 import json
+import pickle
 from metrics.function_metrics import span_f1_prune, ECE_Scores, get_predict_prune
+from combination.comb_voting import CombByVoting
 
 class FewShotNERFramework:
     def __init__(self, args, logger, task_idx2label, train_data_loader, val_data_loader, test_data_loader, edl, seed_num, num_labels):
@@ -86,6 +88,9 @@ class FewShotNERFramework:
                     for idx in range(sent_num):
                         json.dump(context_results[idx], fout, ensure_ascii=False)
                         fout.write('\n')
+
+                # 保存预测结果用于组合器
+                self.save_predictions_for_combination(context_results, mode)
 
             return precision, recall, f1, ece
 
@@ -192,3 +197,106 @@ class FewShotNERFramework:
 
     def inference(self, model):
         f1, ece = self.eval(model, mode='test')
+
+    def save_predictions_for_combination(self, context_results, mode):
+        """保存预测结果用于模型组合"""
+        if not self.args.enable_combination:
+            return
+        
+        pred_chunks = []
+        true_chunks = []
+        
+        for result in context_results:
+            # 从context_results中提取chunk信息
+            if 'pred_entities' in result:
+                for entity in result['pred_entities']:
+                    label = entity.get('label', 'O')
+                    start = entity.get('start', 0)
+                    end = entity.get('end', 0)
+                    sent_id = result.get('sent_id', 0)
+                    pred_chunks.append((label, start, end, sent_id))
+            
+            if 'true_entities' in result:
+                for entity in result['true_entities']:
+                    label = entity.get('label', 'O')
+                    start = entity.get('start', 0)
+                    end = entity.get('end', 0)
+                    sent_id = result.get('sent_id', 0)
+                    true_chunks.append((label, start, end, sent_id))
+        
+        # 保存结果
+        save_dir = os.path.join(self.args.results_dir, "combination_data")
+        os.makedirs(save_dir, exist_ok=True)
+        
+        save_file = os.path.join(save_dir, f"linkner_{mode}_results.pkl")
+        with open(save_file, 'wb') as f:
+            pickle.dump((pred_chunks, true_chunks), f)
+        
+        self.logger.info(f"Saved predictions for combination: {save_file}")
+
+    def run_model_combination(self, model_files=None, model_f1s=None, method='voting_majority'):
+        """运行模型组合"""
+        if not self.args.enable_combination:
+            self.logger.info("Model combination is disabled")
+            return None
+        
+        # 使用参数或者配置文件中的模型列表
+        if model_files is None:
+            model_files = self.args.model_files
+        if model_f1s is None:
+            model_f1s = self.args.model_f1s
+        
+        if not model_files:
+            self.logger.warning("No model files specified for combination")
+            return None
+        
+        # 确保F1分数列表长度与模型文件列表长度一致
+        if not model_f1s or len(model_f1s) != len(model_files):
+            self.logger.warning("Using default F1 scores for combination")
+            model_f1s = [1.0] * len(model_files)
+        
+        # 获取数据集类别
+        classes = [self.args.label2idx_list[i][0] for i in range(len(self.args.label2idx_list)) 
+                  if self.args.label2idx_list[i][0] != 'O']
+        
+        # 创建组合器
+        combiner = CombByVoting(
+            dataname=self.args.dataname,
+            file_dir=os.path.dirname(model_files[0]) if model_files else self.args.results_dir,
+            fmodels=[os.path.basename(f) for f in model_files],
+            f1s=model_f1s,
+            cmodelname=f"LinkNER_Combined_{method}",
+            classes=classes,
+            fn_stand_res="",  # 不需要标准结果文件
+            fn_prob=self.args.prob_file if hasattr(self.args, 'prob_file') else "",
+            result_dir=self.args.combination_result_dir
+        )
+        
+        # 执行组合
+        self.logger.info(f"Running model combination with method: {method}")
+        results = combiner.combine_results(method=method)
+        
+        f1, p, r, correct_preds, total_preds, total_correct = results
+        self.logger.info(f"Combination results - F1: {f1:.4f}, Precision: {p:.4f}, Recall: {r:.4f}")
+        
+        return results
+
+    def inference_with_combination(self, model):
+        """推理时使用组合器功能"""
+        # 首先运行标准推理
+        f1, ece = self.eval(model, mode='test')
+        
+        # 如果启用了组合器功能，运行模型组合
+        if self.args.enable_combination and self.args.model_files:
+            self.logger.info("Running model combination...")
+            combination_results = self.run_model_combination(
+                method=self.args.combination_method
+            )
+            
+            if combination_results:
+                comb_f1 = combination_results[0]
+                self.logger.info(f"Individual model F1: {f1:.4f}")
+                self.logger.info(f"Combined model F1: {comb_f1:.4f}")
+                self.logger.info(f"Improvement: {comb_f1 - f1:.4f}")
+        
+        return f1, ece
