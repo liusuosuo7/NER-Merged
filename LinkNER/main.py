@@ -5,6 +5,7 @@ import random
 import logging
 import torch
 import json
+import time
 from src.framework import FewShotNERFramework
 from src.combined_framework import CombinedFewShotNERFramework
 from dataloaders.spanner_dataset import get_span_labels, get_loader
@@ -129,8 +130,12 @@ def main():
         logger.info("training is ended! 🎉")
 
     if args.state == 'inference':
-        model = torch.load(args.inference_model)
-        framework.inference(model)
+        if args.use_combination:
+            # In combination mode, we don't need a single checkpoint; models are loaded via config
+            framework.inference()
+        else:
+            model = torch.load(args.inference_model)
+            framework.inference(model)
         logger.info("inference is ended!! 🎉")
 
 if __name__ == '__main__':
