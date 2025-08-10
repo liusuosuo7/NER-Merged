@@ -40,6 +40,16 @@ class CombinedSpanNER:
         # 初始化组合不确定性估计器
         uncertainty_methods = getattr(args, 'uncertainty_methods', ['entropy', 'variance', 'disagreement'])
         self.uncertainty_estimator = CombinedUncertaintyEstimator(uncertainty_methods)
+
+        # idx 到 label 的映射，避免依赖列表位置
+        self.idx2label = {}
+        if hasattr(args, 'label2idx_list') and args.label2idx_list:
+            for lab, lab_id in args.label2idx_list:
+                self.idx2label[int(lab_id)] = lab
+        else:
+            # 回退占位
+            for i in range(self.num_labels):
+                self.idx2label[i] = f"LABEL_{i}"
         
     def load_model(self, model_path: str, model_name: str, f1_score: float = 0.0):
         """加载单个NER模型"""
@@ -96,16 +106,13 @@ class CombinedSpanNER:
                         span_key = (batch_idx, batch_i, span_i, tuple(span_idx))
                         
                         # 获取预测标签
-                        label_id = pred_id[batch_i][span_i].item()
-                        if hasattr(self.args, 'label2idx_list') and self.args.label2idx_list:
-                            label = self.args.label2idx_list[label_id][0] if label_id < len(self.args.label2idx_list) else 'O'
-                        else:
-                            label = f"LABEL_{label_id}"
+                        label_id = int(pred_id[batch_i][span_i].item())
+                        label = self.idx2label.get(label_id, 'O')
                         
                         # 存储结果
                         span_predictions[span_key] = label
                         span_probabilities[span_key] = predicts[batch_i][span_i].cpu().numpy()
-                        span_uncertainties[span_key] = uncertainty[batch_i][span_i].item()
+                        span_uncertainties[span_key] = float(uncertainty[batch_i][span_i].item())
         
         # 更新模型结果
         model_result.predictions = span_predictions
@@ -176,7 +183,7 @@ class CombinedSpanNER:
             if span_key in model_result.probabilities:
                 probs = model_result.probabilities[span_key]
                 f1_weight = model_result.f1_score if self.use_f1_weights else 1.0
-                weight = self.f1_weight * f1_weight + self.prob_weight * np.max(probs)
+                weight = self.f1_weight * f1_weight + self.prob_weight * float(np.max(probs))
                 
                 combined_probs += weight * probs
                 total_weight += weight
@@ -188,14 +195,10 @@ class CombinedSpanNER:
         combined_probs /= total_weight
         
         # 获取最佳标签
-        best_label_id = np.argmax(combined_probs)
-        confidence = combined_probs[best_label_id]
+        best_label_id = int(np.argmax(combined_probs))
+        confidence = float(combined_probs[best_label_id])
+        best_label = self.idx2label.get(best_label_id, 'O')
         
-        if hasattr(self.args, 'label2idx_list') and self.args.label2idx_list:
-            best_label = self.args.label2idx_list[best_label_id][0] if best_label_id < len(self.args.label2idx_list) else 'O'
-        else:
-            best_label = f"LABEL_{best_label_id}"
-            
         return best_label, confidence
     
     def combine_predictions(self, all_span_keys: List[Tuple]) -> Tuple[Dict, Dict, Dict]:
@@ -238,11 +241,11 @@ class CombinedSpanNER:
                 for model_name, model_result in self.model_results.items():
                     if span_key in model_result.uncertainties:
                         uncertainties.append(model_result.uncertainties[span_key])
-                combined_uncertainty = np.mean(uncertainties) if uncertainties else 1.0
+                combined_uncertainty = float(np.mean(uncertainties)) if uncertainties else 1.0
             
             combined_predictions[span_key] = label
-            combined_confidences[span_key] = confidence
-            combined_uncertainties[span_key] = combined_uncertainty
+            combined_confidences[span_key] = float(confidence)
+            combined_uncertainties[span_key] = float(combined_uncertainty)
         
         return combined_predictions, combined_confidences, combined_uncertainties
     
