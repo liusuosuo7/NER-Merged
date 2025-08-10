@@ -94,7 +94,13 @@ class CombinedFewShotNERFramework:
                             # 获取标签ID
                             label = predictions[span_key]
                             if hasattr(self.args, 'label2idx_list') and self.args.label2idx_list:
-                                label_id = next((idx for idx, (l, _) in enumerate(self.args.label2idx_list) if l == label), 0)
+                                # find the true label id from (label, id) pairs
+                                for lab, lab_id in self.args.label2idx_list:
+                                    if lab == label:
+                                        label_id = int(lab_id)
+                                        break
+                                else:
+                                    label_id = 0
                             else:
                                 label_id = 0
                             
