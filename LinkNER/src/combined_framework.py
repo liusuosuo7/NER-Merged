@@ -125,6 +125,9 @@ class CombinedFewShotNERFramework:
         ece = 0.0  # 组合器的ECE计算需要特殊处理
         
         if mode == 'test':
+            # Ensure results directory exists
+            if not os.path.exists(self.args.results_dir):
+                os.makedirs(self.args.results_dir, exist_ok=True)
             results_dir = os.path.join(self.args.results_dir, f"{self.args.dataname}_combined_local_model.jsonl")
             sent_num = len(context_results)
 
